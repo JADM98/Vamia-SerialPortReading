@@ -7,6 +7,10 @@ from classes.dataframe_sensor import DataframeSensor
 from classes.dataframe_operations import DataframeOperations
 
 class PortController():
+    #static Variables
+    GATEWAY_ESP32 = 0
+    GATEWAY_VAMIA_V0 = 1
+
     def __init__(self, port:str, baudRate:int = 115200, numberOfTests:int = 10, measurementsPerTest:int = 10) -> None:
         self.__numberOfTests = numberOfTests
         self.__measurementsPerTest = measurementsPerTest
@@ -14,11 +18,17 @@ class PortController():
         self.port = port
         self.baudRate = baudRate
 
-    def start(self):
-        self.portThread = threading.Thread(target=self._readPort, args= [])
+    def start(self, gateway:int):
+        self.portThread = threading.Thread(target=self._readPort, args= [gateway])
         self.portThread.start()
 
     def wait(self):
+        self.portThread.join()
+
+    def printAllData(self):
+        self.portThread = threading.Thread(target=self._printAllData, args= [])
+        self.portThread.start()
+
         self.portThread.join()
 
     def setTestValues(self, values:list[str]):
@@ -26,7 +36,7 @@ class PortController():
             raise ValueError("Exception in number of test values passed. Expected {}, but received {}.".format(self.__numberOfTests, len(values)))
         self.__values = values
 
-    def _readPort(self):
+    def _readPort(self, gateway:int):
         serialPort = serial.Serial(port=self.port, baudrate=self.baudRate)
         mac = None
         avg = None
@@ -38,20 +48,37 @@ class PortController():
         while(True):
             if( serialPort.inWaiting() > 0 ):
                 data = serialPort.readline(None).decode('ascii')
-                commandConfirmed = False
+                # print(data, len(data))
 
-                if( PortCommands.checkIfCommand(data) ):
-                    commandConfirmed = True
-                    if( PortCommands.contains(data, "mac") ):
-                        position = PortCommands.getLastPosition(data, "mac:")
-                        mac = PortCommands.getStringUntil(data, position, ",")
-                    if( PortCommands.contains(data, "average") ):
-                        position = PortCommands.getLastPosition(data, "average:")
-                        avg = PortCommands.getString(data, position, PortCommands.END_OF_STRING)
+                if gateway == PortController.GATEWAY_ESP32:
+                    commandConfirmed = False
+
+                    if( PortCommands.checkIfCommand(data) ):
+                        commandConfirmed = True
+                        if( PortCommands.contains(data, "mac") ):
+                            position = PortCommands.getLastPosition(data, "mac:")
+                            mac = PortCommands.getStringUntil(data, position, ",")
+                        if( PortCommands.contains(data, "average") ):
+                            position = PortCommands.getLastPosition(data, "average:")
+                            avg = PortCommands.getString(data, position, PortCommands.END_OF_STRING)
                 
+                elif gateway == PortController.GATEWAY_VAMIA_V0:
+                    print(data)
+                    print(PortCommands.contains(data, "MQTT"))
+                    # if PortCommands.contains(data,"MQTT"):
+                    #     # print(data, PortCommands.contains(data, "MQTT"))
+                    #     commandConfirmed = True
+                    #     if PortCommands.contains(data,"ADDR"):
+                    #         position = PortCommands.getLastPosition(data,"AADR:")
+                    #         mac = PortCommands.getStringUntil(data, position, " ")
+                    #         # print(data)
+                    #         # print(position, mac)
+                    #     if PortCommands.contains(data,"RSSI"):
+                    #         position = PortCommands.getLastPosition(data,"AADR:")
+                    #         avg = PortCommands.getStringUntil(data, position, " ")
+
                 if commandConfirmed:
                     if(mac is not None) and (avg is not None):
-
                         if sensor is None:
                             sensor = Sensor(mac)
                             sensor.insertRSSI(int(avg))
@@ -65,7 +92,7 @@ class PortController():
                                     print("Number of rows: {}".format(counter))
                                     sensor.resetRSSI()
                                     updateData = True
-                
+
                 if counter == self.__numberOfTests:
                     stats = DataframeOperations.getStatisticDataframe(sensorData.readingsList)
                     DataframeOperations.writeToCsv(sensorData.readingsDataframe, "Measurements.xlsx", index=self.__values)
@@ -76,3 +103,12 @@ class PortController():
                     updateData = False
                     input("Press Enter to continue for test number {}".format(counter + 1))
                     serialPort.read(serialPort.inWaiting())
+                
+
+    def _printAllData(self):
+        serialPort = serial.Serial(port=self.port, baudrate=self.baudRate)
+
+        while(True):
+            if( serialPort.inWaiting() > 0 ):
+                data = serialPort.readline(None).decode('ascii')
+                print(data)
