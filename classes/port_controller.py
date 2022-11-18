@@ -15,6 +15,8 @@ class PortController():
         self.__values = None
         self.port = port
         self.baudRate = baudRate
+        self.__measurementsFN = "Measuremets.xlsx"
+        self.__statisticsFN = "Statistics.xlsx"
 
     def start(self, gateway:Gateway):
         self.portThread = threading.Thread(target=self._readPort, args= [gateway])
@@ -31,6 +33,10 @@ class PortController():
         if len(values) != self.__numberOfTests:
             raise ValueError("Exception in number of test values passed. Expected {}, but received {}.".format(self.__numberOfTests, len(values)))
         self.__values = values
+
+    def establishFileNames(self, measurementFileName:str = "Measurements.xlsx", statisticsFileName:str = "Statistics.xlsx"):
+        self.__measurementsFN = measurementFileName
+        self.__statisticsFN = statisticsFileName
 
     def _readPort(self, gateway:Gateway):
         serialPort = serial.Serial(port=self.port, baudrate=self.baudRate)
@@ -77,8 +83,8 @@ class PortController():
 
                 if counter == self.__numberOfTests:
                     stats = DataframeOperations.getStatisticDataframe(sensorData.readingsList)
-                    DataframeOperations.writeToCsv(sensorData.readingsDataframe, "Measurements.xlsx", index=self.__values)
-                    DataframeOperations.writeToCsv(stats, "Statistics.xlsx", index=self.__values)
+                    DataframeOperations.writeToCsv(sensorData.readingsDataframe, name=self.__measurementsFN, index=self.__values)
+                    DataframeOperations.writeToCsv(stats, name=self.__statisticsFN, index=self.__values)
                     break
 
                 if updateData:
