@@ -5,14 +5,8 @@ class PortCommands():
     START_OF_STRING = 0
 
     @staticmethod
-    def checkIfCommand(data:str) -> bool:
-        if(data.find("Command >> ") == 0):
-            return True
-        return False
-
-    @staticmethod
     def contains(data:str, textToFind:str) -> bool:
-        if(data.find(textToFind)):
+        if(data.find(textToFind) >= 0):
             return True
         return False
 

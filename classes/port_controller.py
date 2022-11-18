@@ -5,11 +5,9 @@ from classes.sensor import Sensor
 from classes.port_commands import PortCommands
 from classes.dataframe_sensor import DataframeSensor
 from classes.dataframe_operations import DataframeOperations
+from classes.gateway import *
 
 class PortController():
-    #static Variables
-    GATEWAY_ESP32 = 0
-    GATEWAY_VAMIA_V0 = 1
 
     def __init__(self, port:str, baudRate:int = 115200, numberOfTests:int = 10, measurementsPerTest:int = 10) -> None:
         self.__numberOfTests = numberOfTests
@@ -18,7 +16,7 @@ class PortController():
         self.port = port
         self.baudRate = baudRate
 
-    def start(self, gateway:int):
+    def start(self, gateway:Gateway):
         self.portThread = threading.Thread(target=self._readPort, args= [gateway])
         self.portThread.start()
 
@@ -29,17 +27,15 @@ class PortController():
         self.portThread = threading.Thread(target=self._printAllData, args= [])
         self.portThread.start()
 
-        self.portThread.join()
-
     def setTestValues(self, values:list[str]):
         if len(values) != self.__numberOfTests:
             raise ValueError("Exception in number of test values passed. Expected {}, but received {}.".format(self.__numberOfTests, len(values)))
         self.__values = values
 
-    def _readPort(self, gateway:int):
+    def _readPort(self, gateway:Gateway):
         serialPort = serial.Serial(port=self.port, baudrate=self.baudRate)
         mac = None
-        avg = None
+        rssi = None
         sensor = None
         counter = 0
         updateData = False
@@ -48,45 +44,31 @@ class PortController():
         while(True):
             if( serialPort.inWaiting() > 0 ):
                 data = serialPort.readline(None).decode('ascii')
-                # print(data, len(data))
+                commandConfirmed = False
+                mac:str= None
+                rssi:str = None
 
-                if gateway == PortController.GATEWAY_ESP32:
-                    commandConfirmed = False
+                if gateway.checkIfCommand(data):
+                    if gateway.contains(data, GatewayKeys.MAC):
+                        mac = gateway.getValueOf(data, GatewayKeys.MAC)
+                        rssi = gateway.getValueOf(data, GatewayKeys.AVERAGE)
+                    elif gateway.contains(data, GatewayKeys.ADDRESS):
+                        mac = gateway.getValueOf(data, GatewayKeys.ADDRESS)
+                        rssi = gateway.getValueOf(data, GatewayKeys.RSSI)
 
-                    if( PortCommands.checkIfCommand(data) ):
-                        commandConfirmed = True
-                        if( PortCommands.contains(data, "mac") ):
-                            position = PortCommands.getLastPosition(data, "mac:")
-                            mac = PortCommands.getStringUntil(data, position, ",")
-                        if( PortCommands.contains(data, "average") ):
-                            position = PortCommands.getLastPosition(data, "average:")
-                            avg = PortCommands.getString(data, position, PortCommands.END_OF_STRING)
-                
-                elif gateway == PortController.GATEWAY_VAMIA_V0:
-                    print(data)
-                    print(PortCommands.contains(data, "MQTT"))
-                    # if PortCommands.contains(data,"MQTT"):
-                    #     # print(data, PortCommands.contains(data, "MQTT"))
-                    #     commandConfirmed = True
-                    #     if PortCommands.contains(data,"ADDR"):
-                    #         position = PortCommands.getLastPosition(data,"AADR:")
-                    #         mac = PortCommands.getStringUntil(data, position, " ")
-                    #         # print(data)
-                    #         # print(position, mac)
-                    #     if PortCommands.contains(data,"RSSI"):
-                    #         position = PortCommands.getLastPosition(data,"AADR:")
-                    #         avg = PortCommands.getStringUntil(data, position, " ")
+                if (mac is not None) and (rssi is not None):
+                    commandConfirmed = True
 
                 if commandConfirmed:
-                    if(mac is not None) and (avg is not None):
+                    if(mac is not None) and (rssi is not None):
                         if sensor is None:
                             sensor = Sensor(mac)
-                            sensor.insertRSSI(int(avg))
-                            print(mac, avg)
+                            sensor.insertRSSI(int(rssi))
+                            print(mac, rssi)
                         else:
                             if sensor.checkIMEI(mac):
-                                print(mac, avg)
-                                sensor.insertRSSI(int(avg))
+                                print(mac, rssi)
+                                sensor.insertRSSI(int(rssi))
                                 if( sensor.checkReadingsLength(self.__measurementsPerTest) ):
                                     counter = sensorData.insertMeasurements(sensor.readings)
                                     print("Number of rows: {}".format(counter))
