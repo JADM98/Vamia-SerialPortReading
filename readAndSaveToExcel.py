@@ -1,13 +1,18 @@
 from classes import port_controller
+from classes import strategy
 from classes.gateway import GatewayService
 
-myPort = port_controller.PortController(port="COM7", measurementsPerTest=15, numberOfTests=20)
-gateway = GatewayService.create(GatewayService.VAMIA_V0)
+gateway = GatewayService.create(GatewayService.ESP32)
 
-myPort.establishFileNames(measurementFileName="Measuremets6.xlsx", statisticsFileName="Statistics6.xlsx")
-list1 = [i*20 for i in range(11)]
-list2 = [i*40+240 for i in range(9)]
-myPort.setTestValues(list1+list2)
+strat = strategy.KalmanStrategy(numberOfMeasurements=3, numberOfTests=3)
+# strat = strategy.DefaultStrategy(numberOfMeasurements=10, numberOfTests=3)
+# strat.setIndexValues(["1", "2", "3"])
+# strat.setMainFileName("Test_2.xlsx")
+# strat.setKalmanFileName("Test_2_kalman.xlsx")
+# strat.setStatisticsFileName("Stats_Test_2.xlsx")
+strat.setMeasurementStdDev(3.0)
+
+myPort = port_controller.PortController(port="COM5", processDataStrategy=strat)
 
 myPort.start(gateway=gateway)
 myPort.wait()
